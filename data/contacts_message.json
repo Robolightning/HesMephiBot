@@ -1,0 +1,11 @@
+{
+    "text": "Мы предлагаем лучшие услуги...2",
+    "attachments": [
+        "images/about.jpg",
+        "images/about2.jpg"
+    ],
+    "buttons": {
+        "Назад": "welcome_message.json",
+        "Главная": "welcome_message.json"
+    }
+}

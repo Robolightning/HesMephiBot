@@ -1,31 +1,109 @@
+import json
+import os
 import telebot
-from telebot import types
+import logging
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto, InputMediaDocument
 
-botTimeWeb = telebot.TeleBot('7740540709:AAF4yOm_rRYknUF1Nmbacwc6Z44t4hl037c')
+# Настройка логирования
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-@botTimeWeb.message_handler(commands=['start'])
-def startBot(message):
-  first_mess = f"<b>{message.from_user.first_name} {message.from_user.last_name}</b>, привет!\nХочешь расскажу немного о ВИШ МИФИ?"
-  markup = types.InlineKeyboardMarkup()
-  button_yes = types.InlineKeyboardButton(text = 'Да', callback_data='yes')
-  markup.add(button_yes)
-  botTimeWeb.send_message(message.chat.id, first_mess, parse_mode='html', reply_markup=markup)
 
-@botTimeWeb.callback_query_handler(func=lambda call:True)
-def response(function_call):
-    if function_call.message:
-        match function_call.data:
-            case "yes":
-                second_mess = "Скажи, что тебя интересует?"
-                markup = types.InlineKeyboardMarkup()
-                markup.add(types.InlineKeyboardButton("Поступление", callback_data='1'))
-                markup.add(types.InlineKeyboardButton("АСЭ", callback_data='2'))
-                markup.add(types.InlineKeyboardButton("Общежития", callback_data='3'))
-                markup.add(types.InlineKeyboardButton("Военный учёт", callback_data='4'))
-                markup.add(types.InlineKeyboardButton("Назад", callback_data='5'))
-                botTimeWeb.send_message(function_call.message.chat.id, second_mess, reply_markup=markup)
-                botTimeWeb.answer_callback_query(function_call.id)
-            case "5":
-                startBot(function_call.message)
+# Загрузка токена из файла
+def load_token():
+    with open('token.txt', 'r', encoding='utf-8') as file:
+        return file.read().strip()
 
-botTimeWeb.infinity_polling()
+
+# Загрузка сообщения из JSON-файла
+def load_message(file_name):
+    with open(f'data/{file_name}', 'r', encoding='utf-8') as file:
+        return json.load(file)
+
+
+# Инициализация бота
+bot = telebot.TeleBot(load_token(), parse_mode=None)
+
+
+# Обработчик команды /start
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    send_message(message.chat.id, "welcome_message.json")
+
+
+# Отправка сообщения с кнопками и вложениями
+def send_message(chat_id, file_name):
+    try:
+        msg = load_message(file_name)
+        text = msg["text"]
+        attachments = [a for a in msg.get("attachments", []) if a]  # Убираем None из вложений
+        buttons = [
+            [InlineKeyboardButton(btn_text, callback_data=key)]
+            for btn_text, key in msg["buttons"].items()
+        ]
+        keyboard = InlineKeyboardMarkup(buttons)
+
+        # Если нет вложений
+        if not attachments:
+            bot.send_message(chat_id, text, reply_markup=keyboard)
+
+        # Если одно вложение (документ или изображение)
+        elif len(attachments) == 1:
+            attachment = attachments[0]
+            if os.path.exists(f'data/{attachment}'):
+                with open(f'data/{attachment}', 'rb') as file:
+                    if attachment.endswith(('.jpg', '.jpeg', '.png', '.gif')):
+                        # Отправка фото с текстом и кнопками
+                        bot.send_photo(chat_id, file, caption=text, reply_markup=keyboard)
+                    else:
+                        # Отправка документа с текстом и кнопками
+                        bot.send_document(chat_id, file, caption=text, reply_markup=keyboard)
+
+        # Если несколько документов
+        elif all(attachment.endswith(('.pdf', '.docx', '.txt')) for attachment in attachments):
+            bot.send_message(chat_id, text)  # Отправка текста отдельно
+            media_group = [InputMediaDocument(open(f'data/{attachment}', 'rb')) for attachment in attachments if os.path.exists(f'data/{attachment}')]
+            bot.send_media_group(chat_id, media_group)
+            # Отправка пустого сообщения с кнопками
+            bot.send_message(chat_id, "ᅠ", reply_markup=keyboard)  # Спецсимвол используется для отправки пустого сообщения
+
+        # Если несколько изображений
+        elif all(attachment.endswith(('.jpg', '.jpeg', '.png', '.gif')) for attachment in attachments):
+            bot.send_message(chat_id, text)  # Отправка текста отдельно
+            media_group = [InputMediaPhoto(open(f'data/{attachment}', 'rb')) for attachment in attachments if os.path.exists(f'data/{attachment}')]
+            bot.send_media_group(chat_id, media_group)
+            # Отправка пустого сообщения с кнопками
+            bot.send_message(chat_id, "ᅠ", reply_markup=keyboard)  # Спецсимвол используется для отправки пустого сообщения
+
+        # Если вложения разнородные или больше одного изображения/документа
+        else:
+            bot.send_message(chat_id, text)  # Отправка текста отдельно
+            media_group = []
+            for attachment in attachments:
+                if os.path.exists(f'data/{attachment}'):
+                    if attachment.endswith(('.jpg', '.jpeg', '.png', '.gif')):
+                        media_group.append(InputMediaPhoto(open(f'data/{attachment}', 'rb')))
+                    else:
+                        bot.send_document(chat_id, open(f'data/{attachment}', 'rb'))
+            if media_group:
+                bot.send_media_group(chat_id, media_group)
+            # Отправка пустого сообщения с кнопками
+            bot.send_message(chat_id, "ᅠ", reply_markup=keyboard)  # Спецсимвол используется для отправки пустого сообщения
+
+    except Exception as e:
+        logging.error(f"Произошла ошибка: {e}")
+
+
+# Обработчик нажатий на кнопки
+@bot.callback_query_handler(func=lambda call: True)
+def process_callback(call):
+    try:
+        send_message(call.message.chat.id, call.data)
+        bot.answer_callback_query(call.id)
+    except Exception as e:
+        logging.error(f"Произошла ошибка при обработке запроса: {e}")
+
+
+
+# Запуск бота
+if __name__ == '__main__':
+    bot.polling(none_stop=True, timeout=120, long_polling_timeout=5)

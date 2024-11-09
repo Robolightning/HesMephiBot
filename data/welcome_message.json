@@ -1,0 +1,11 @@
+{
+    "text": "Добро пожаловать в наш справочный бот!",
+    "attachments": [
+        null
+    ],
+    "buttons": {
+        "О нас": "about_message.json",
+        "Контакты": "contacts_message.json",
+        "Помощь": "help_message.json"
+    }
+}

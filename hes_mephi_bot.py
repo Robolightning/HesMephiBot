@@ -5,7 +5,7 @@ import logging
 import asyncio
 import threading
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto, InputMediaDocument
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -115,15 +115,18 @@ def process_callback(call):
 async def check_schedule():
     schedule_file = 'schedule.json'
     while True:
+        current_date = datetime.now().strftime('%Y-%m-%d')
         current_time = datetime.now().strftime('%H:%M')
         schedule_data = read_schedule(schedule_file)
 
         for event in schedule_data['events']:
-            if event['time'] == current_time:
+            event_date = event['date']
+            event_time = event['time']
+            if event_date == current_date and event_time == current_time:
                 message_file = event['message_file']
                 for user in users:
                     send_message(user, message_file)
-        await asyncio.sleep(3600)  # Проверяем каждый час
+        await asyncio.sleep(60)  # Проверяем каждую минуту
 
 # Функция для чтения расписания
 def read_schedule(filename):
